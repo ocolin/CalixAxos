@@ -2,140 +2,167 @@
 
 declare( strict_types = 1 );
 
-namespace Ocolin\Calix\Axos;
+namespace Ocolin\CalixAxos;
 
+use Ocolin\CalixAxos\Exceptions\HttpException;
 use GuzzleHttp\Exception\GuzzleException;
-use Psr\Http\Message\ResponseInterface;
 
 class Client
 {
-    public HTTP $http;
+    private HTTP $http;
 
 /* CONSTRUCTOR
 ----------------------------------------------------------------------------- */
 
     /**
-     * @param string|null $url Base URL of AXOS server.
-     * @param string|null $username Basic Auth username.
-     * @param string|null $password Basic Auth password.
-     * @param int $timeout HTTP timeout. Default = 20 seconds.
-     * @param bool $verify Verify SSL connection. Default off.
+     * @param ?Config $config Configuration data object.
+     * @param ?HTTP $http Guzzle client for mocking.
      */
     public function __construct(
-        ?string $url = null,
-        ?string $username = null,
-        ?string $password = null,
-        int $timeout = 20,
-        bool $verify = false,
+        ?Config $config = null,
+          ?HTTP $http   = null
     )
     {
-        $this->http = new HTTP(
-                 url: $url,
-            username: $username,
-            password: $password,
-             timeout: $timeout,
-              verify: $verify,
-        );
+        $config = $config ?? new Config();
+        $this->http = $http ?? new HTTP( config: $config );
     }
 
 
-/* API RESPONSE BODY
+
+/* GET REQUEST
 ----------------------------------------------------------------------------- */
 
     /**
-     * @param string $path API end point path.
-     * @param string $method API HTTP method to use.
-     * @param array<string, string|int|float>|object|null $query Path and Query parameters.
-     * @param array<string, mixed>|object|null $body Body parameters for POST/PUT.
-     * @return mixed Output of API service response.
-     * @throws GuzzleException
+     * @param string $endpoint API endpoint URI.
+     * @param array<string, string|int|float|bool>|object $query Query and
+     *  path parameters.
+     * @return Response Client response object.
+     * @throws HttpException HTTP method error.
+     * @throws GuzzleException HTTP errors.
      */
-    public function call(
-        string $path,
-        string $method = 'GET',
-        array|object|null $query = null,
-        array|object|null $body = null,
-    ) : mixed
+    public function get( string $endpoint, array|object $query = [] ) : Response
     {
-        $output = $this->full(
-              path: $path,
-            method: $method,
-             query: $query,
-              body: $body,
-        );
+        $query = (array)$query;
 
-        return $output->body;
+        return $this->http->request( path: $endpoint, query: $query );
     }
 
 
 
-/* API FULL CALL
+/* POST METHOD
 ----------------------------------------------------------------------------- */
 
     /**
-     * @param string $path
-     * @param string $method
-     * @param array<string, string|int|float>|object|null $query
-     * @param array<string, mixed>|object|null $body
-     * @return Response
-     * @throws GuzzleException
+     * @param string $endpoint API endpoint URI.
+     * @param array<string, string|int|float|bool>|object $query Query and
+     *  path parameters.
+     * @param array<mixed>|object $body HTTP body parameters.
+     * @return Response Client response object.
+     * @throws HttpException HTTP method error.
+     * @throws GuzzleException HTTP errors.
      */
-    public function full(
-        string $path,
-        string $method = 'GET',
-        array|object|null $query = null,
-        array|object|null $body = null,
+    public function post(
+              string $endpoint,
+        array|object $query = [],
+        array|object $body  = [],
     ) : Response
     {
-        $method = strtoupper( string: $method );
+        $query = (array)$query;
+        $body  = (array)$body;
 
-        return match( $method )
-        {
-            'POST' => self::format_Response(
-                 response: $this->http->post(
-                     path: $path,
-                    query: $query,
-                     body: $body,
-                )
-            ),
-            'PUT' => self::format_Response(
-                 response: $this->http->put(
-                     path: $path,
-                    query: $query,
-                     body: $body,
-                )
-            ),
-            'DELETE' => self::format_Response(
-                 response: $this->http->delete(
-                     path: $path,
-                    query: $query,
-                )
-            ),
-            default => self::format_Response(
-                 response: $this->http->get(
-                     path: $path,
-                    query: $query,
-                )
-            ),
-        };
+        return $this->http->request(
+              path: $endpoint,
+            method: 'POST',
+             query: $query,
+              body: $body
+        );
     }
 
 
 
-/* FORMAT HTTP RESPONSE
+/* PUT METHOD
 ----------------------------------------------------------------------------- */
 
     /**
-     * @param ResponseInterface $response Guzzle response object.
-     * @return Response Formatted response object.
+     * @param string $endpoint API endpoint URI.
+     * @param array<string, string|int|float|bool>|object $query Query and
+     *  path parameters.
+     * @param array<mixed>|object $body HTTP body parameters.
+     * @return Response Client response object.
+     * @throws HttpException HTTP method error.
+     * @throws GuzzleException HTTP errors.
      */
-    private static function format_Response( ResponseInterface $response ) : Response
+    public function put(
+        string $endpoint,
+        array|object $query = [],
+        array|object $body  = [],
+    ) : Response
     {
-        return new Response(
-                   status: $response->getStatusCode(),
-            statusMessage: $response->getReasonPhrase(),
-                  headers: $response->getHeaders(),
-                     body: json_decode( json: $response->getBody()->getContents())
+        $query = (array)$query;
+        $body  = (array)$body;
+
+        return $this->http->request(
+              path: $endpoint,
+            method: 'PUT',
+             query: $query,
+              body: $body
+        );
+    }
+
+
+
+/* DELETE METHOD
+----------------------------------------------------------------------------- */
+
+    /**
+     * @param string $endpoint API endpoint URI.
+     * @param array<string, string|int|float|bool>|object $query Query and
+     *  path parameters.
+     * @return Response Client response object.
+     * @throws HttpException HTTP method error.
+     * @throws GuzzleException HTTP errors.
+     */
+    public function delete( string $endpoint, array|object $query = [] ) : Response
+    {
+        $query = (array)$query;
+
+        return $this->http->request(
+              path: $endpoint,
+            method: 'DELETE',
+             query: $query
+        );
+    }
+
+
+
+/* GENERAL REQUEST METHOD
+----------------------------------------------------------------------------- */
+
+    /**
+     * @param string $endpoint API endpoint URI.
+     * @param string $method HTTP method.
+     * @param array<string, string|int|float|bool>|object $query Query and
+     *  path parameters.
+     * @param array<mixed>|object $body HTTP body parameters.
+     * @return Response Client response object.
+     * @throws HttpException HTTP method error.
+     * @throws GuzzleException HTTP errors.
+     */
+    public function request(
+        string $endpoint,
+        string $method,
+        array|object $query = [],
+        array|object $body  = [],
+    ) : Response
+    {
+        $query = (array)$query;
+        $body  = (array)$body;
+
+        return $this->http->request(
+              path: $endpoint,
+            method: $method,
+             query: $query,
+              body: $body
         );
     }
 }
