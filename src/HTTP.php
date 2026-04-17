@@ -2,242 +2,141 @@
 
 declare( strict_types = 1 );
 
-namespace Ocolin\Calix\Axos;
+namespace Ocolin\CalixAxos;
 
-use GuzzleHttp\Client;
+use GuzzleHttp\Client AS GuzzleClient;
+use GuzzleHttp\ClientInterface AS GuzzleInterface;
 use GuzzleHttp\Exception\GuzzleException;
-use Ocolin\EasyEnv\Env;
+use Ocolin\CalixAxos\Exceptions\HttpException;
 use Psr\Http\Message\ResponseInterface;
 
 class HTTP
 {
     /**
-     * @var Client Guzzle HTTP client.
+     * @var GuzzleInterface Guzzle client interface.
      */
-    public Client $client;
+    private GuzzleInterface $guzzle;
 
     /**
-     * @var string Base URL of server.
+     * @var Config Configuration data object.
      */
-    public readonly string $url;
+    private Config $config;
 
     /**
-     * @var string Basic Auth username.
+     * Valid HTTP methods.
      */
-    public readonly string $username;
+    private const array VALID_METHODS = [
+        'GET',
+        'POST',
+        'PUT',
+        'DELETE',
+    ];
 
     /**
-     * @var string Basic Auth password.
+     * Default Guzzle options.
      */
-    public readonly string $password;
-
-    /**
-     * @var array<string, string|int|float>|object|null End point URI query parameters.
-     */
-    public array|object|null $query = null;
-
-    /**
-     * @var string End point path.
-     */
-    public string $path = '';
+    private const array DEFAULT_OPTIONS = [
+        'timeout'         => 20,
+        'connect_timeout' => 20,
+        'verify'          => false,
+    ];
 
 
 /* CONSTRUCTOR
 ----------------------------------------------------------------------------- */
 
     /**
-     * @param string|null $url URL of Calix AXOS Rest service.
-     * @param string|null $username Authentication username.
-     * @param string|null $password Authentication password.
-     * @param int $timeout HTTP timeout, defaults to 20 seconds.
-     * @param bool $verify Verify SSL connection, default off.
+     * @param Config $config Configuration data object.
+     * @param GuzzleInterface|null $guzzle Guzzle interface for mocking.
      */
     public function __construct(
-        ?string $url = null,
-        ?string $username = null,
-        ?string $password = null,
-            int $timeout = 20,
-           bool $verify = false,
+                  Config $config,
+        ?GuzzleInterface $guzzle = null,
     )
     {
-        $this->url = $url ?? Env::getString( name: 'SMX_HOST' );
-        $this->username = $username ?? Env::getString( name: 'SMX_USERNAME' );
-        $this->password = $password ?? Env::getString( name: 'SMX_PASSWORD' );
-
-        $this->client = new Client([
-            'base_uri' => $this->url,
-            'timeout'  => $timeout,
-            'connect_timeout' => $timeout,
-            'verify' => $verify,
-            'http_errors' => false,
-            'headers' => [
-                'Authorization' => 'Basic ' . base64_encode(
-                    string: "{$this->username}:{$this->password}"
-                ),
-                'Accept' => 'application/json',
-                'Content-Type' => 'application/json; charset=utf-8',
-                'User-Agent' => 'Ocolin Calix AxosClient 1.0',
+        $this->config = $config;
+        $this->guzzle = $guzzle ?? new GuzzleClient( array_merge(
+            self::DEFAULT_OPTIONS,
+            $this->config->options,
+            [
+                'base_uri'    => rtrim(
+                        string: (string)$this->config->host, characters: '/'
+                    ) . '/',
+                'auth' => [ $this->config->username, $this->config->password ],
+                'http_errors' => false,
+                'headers'     => [
+                    'Accept'  => 'application/json; charset=utf-8',
+                ],
             ]
-        ]);
+        ));
     }
 
 
-/* POST METHOD
+
+/* API REQUEST
 ----------------------------------------------------------------------------- */
 
     /**
-     * @param string $path API end point path.
-     * @param array<string, string|int|float>|object|null $query Path and Query URI parameters.
-     * @param array<string, mixed>|object|null $body Body parameters for PUT/POST.
-     * @return ResponseInterface Guzzle response object.
-     * @throws GuzzleException
+     * @param string $path Endpoint URI path.
+     * @param string $method HTTP method.
+     * @param array<string, string|int|float|bool> $query Query and path parameters.
+     * @param array<string, mixed> $body POST body content.
+     * @return Response Client API response object.
+     * @throws HttpException Invalid HTTP method.
+     * @throws GuzzleException Any HTTP related errors.
      */
-    public function post(
+    public function request(
         string $path,
-        array|object|null $query = null,
-        array|object|null $body = null,
-    ) : ResponseInterface
+        string $method = 'GET',
+         array $query  = [],
+         array $body   = [],
+    ) : Response
     {
-        $this->query = $query;
-        $this->path  = $path;
-        $this->format_Path();
-        $options = [
-            'query' => $this->query,
-            'json'  => $body
-        ];
-
-        return $this->client->post( uri: $this->path, options: $options );
-    }
-
-
-
-/* GET METHOD
------------------------------------------------------------------------------ */
-
-    /**
-     * @param string $path APi end point path.
-     * @param array<string, string|int|float>|object|null $query Path and Query URI parameters.
-     * @return ResponseInterface Guzzle response object.
-     * @throws GuzzleException
-     */
-    public function get(
-        string $path,
-        array|object|null $query = null,
-    ) : ResponseInterface
-    {
-        $this->query = $query;
-        $this->path  = $path;
-        $this->format_Path();
-        $options = [ 'query' => $this->query ];
-
-        return $this->client->get( uri: $this->path, options: $options );
-    }
-
-
-
-/* DELETE METHOD
------------------------------------------------------------------------------ */
-
-    /**
-     * @param string $path API end point path.
-     * @param array<string, string|int|float>|object|null $query Path and Query URI parameters.
-     * @return ResponseInterface Guzzle response interface.
-     * @throws GuzzleException
-     */
-    public function delete(
-        string $path,
-        array|object|null $query = null,
-    ) : ResponseInterface
-    {
-        $this->query = $query;
-        $this->path  = $path;
-        $this->format_Path();
-        $options = [ 'query' => $query ];
-
-        return $this->client->delete( uri: $this->path, options: $options );
-    }
-
-
-
-/* PUT METHOD
------------------------------------------------------------------------------ */
-
-    /**
-     * @param string $path End point path.
-     * @param array<string, string|int|float>|object|null $query Params for path and query URI.
-     * @param array<string, mixed>|object|null $body Params for PUT body.
-     * @return ResponseInterface Guzzle response interface.
-     * @throws GuzzleException
-     */
-    public function put(
-        string $path,
-        array|object|null $query = null,
-        array|object|null $body = null,
-    ) : ResponseInterface
-    {
-        $this->query = $query;
-        $this->path  = $path;
-        $this->format_Path();
-        $options = [
-            'query' => $this->query,
-            'json'  => $body
-        ];
-
-        return $this->client->put( uri: $this->path, options: $options );
-    }
-
-
-
-/* FORMAT ENDPOINT PATH
------------------------------------------------------------------------------ */
-
-    /**
-     * If the URI path contains variables, we will replace them with the
-     * variable values from the query parameter. We then remove them so they
-     * are not duplicated in the query string of the URI path.
-     */
-    private function format_Path() : void
-    {
-        $this->path = $this->trim_Path( path: $this->path );
-        if( empty( $this->query ) ) { return; }
-        if( is_object( $this->query ) ) { $this->query = (array)$this->query; }
-        if( !str_contains( haystack: $this->path, needle: '{' ) ) { return ; }
-
-        $allowed_types = [ 'string', 'integer', 'float', 'double' ];
-        foreach( $this->query as $name => $value ) {
-            if(
-                in_array( needle: gettype($value), haystack: $allowed_types )  AND
-                str_contains( haystack: $this->path, needle: '{' . $name . '}' )
-            ) {
-                $this->path = str_replace(
-                     search: '{' . $name . '}',
-                    replace: (string)$value,
-                    subject: $this->path
-                );
-                unset( $this->query[$name] );
-            }
-        }
-    }
-
-
-
-/* REMOVE DUPLICATE SLASHES IN URL
------------------------------------------------------------------------------ */
-
-    /**
-     * If both the base URL and the end point path have root slash, remove
-     * the one from end point to eliminate a double slash in the final URL.
-     *
-     * @param string $path Original API endpoint path.
-     * @return string Endpoint path without beginning / if there is one.
-     */
-    private function trim_Path( string $path ) : string
-    {
-        if(
-            str_starts_with( haystack: $path, needle: '/' ) AND
-            str_ends_with( haystack: $this->url, needle: '/' )
+        $method = strtoupper( $method );
+        if( !in_array(
+            needle: $method, haystack: self::VALID_METHODS, strict: true )
         ) {
-            return trim( string: $path, characters: '/' );
+            throw new HttpException(  message: "Invalid HTTP method: {$method}" );
+        }
+
+        $path = self::buildPath( path: $path, query: $query );
+        $options = [];
+        if( !empty( $body ))  { $options['json']  = $body; }
+        if( !empty( $query )) { $options['query'] = $query; }
+
+        return self::buildResponse( $this->guzzle->request(
+             method: $method,
+                uri: $path,
+            options: $options,
+        ));
+    }
+
+
+
+/* BUILD URI PATH
+----------------------------------------------------------------------------- */
+
+    /**
+     * Replaces any variable tokens in URI path and replaces with values.
+     *
+     * @param string $path HTTP URI path.
+     * @param array<string, string|int|float|bool> $query HTTP query and path
+        parameters.
+     * @return string Interpolated URI path.
+     */
+    private static function buildPath( string $path, array &$query ): string
+    {
+        $path = ltrim( string: $path, characters: '/' );
+        if( !str_contains( haystack: $path, needle: '{' )) {  return $path; }
+
+        foreach( $query as $key => $value )
+        {
+            if( str_contains( haystack: $path, needle: "{{$key}}" )) {
+                $path = str_replace(
+                    search: "{{$key}}", replace: (string)$value, subject: $path
+                );
+                unset( $query[$key] );
+            }
         }
 
         return $path;
@@ -245,20 +144,24 @@ class HTTP
 
 
 
-/* ALLOWED HTTP METHODS
+/* CONVERT GUZZLE RESPONSE TO CLIENT RESPONSE
 ----------------------------------------------------------------------------- */
 
     /**
-     * @return string[] List of allowed HTTP methods.
+     * @param ResponseInterface $response Guzzle HTTP response object.
+     * @return Response Client API response object.
      */
-    public static function allowed_Methods(): array
+    private static function buildResponse( ResponseInterface $response ): Response
     {
-        return [
-            'GET',
-            'POST',
-            'PUT',
-            'DELETE',
-        ];
+        $content = $response->getBody()->getContents();
+        $body = json_decode( $content, false );
+        if( !is_object( $body ) AND !is_array( $body )) { $body = $content; }
+
+        return new Response(
+                   status: $response->getStatusCode(),
+            statusMessage: $response->getReasonPhrase(),
+                  headers: $response->getHeaders(),
+                     body: $body
+        );
     }
 }
-

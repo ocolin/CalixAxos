@@ -1,20 +1,43 @@
 {
-    "name": "ocolin/calix-axos-client",
-    "description": "Basic REST Client for Calix AXOS SMx Northbound server",
+    "name": "ocolin/calix-axos",
+    "description": "REST Client for Calix AXOS SMx Northbound server",
+    "homepage": "https://github.com/ocolin/CalixAxos",
+    "keywords": [
+        "calix",
+        "axos",
+        "smx",
+        "gpon",
+        "fiber",
+        "isp",
+        "rest",
+        "api",
+        "client",
+        "http",
+        "guzzle",
+        "networking",
+        "provisioning"
+    ],
+    "minimum-stability": "stable",
+    "prefer-stable": true,
     "require": {
         "php": ">=8.3",
-        "ocolin/easyenv": "^2.4",
-        "guzzlehttp/guzzle": "^7.10"
+        "guzzlehttp/guzzle": "^7.10",
+        "ocolin/global-type": "^2.0"
     },
     "require-dev": {
         "phpstan/phpstan": "^2.1",
-        "phpunit/phpunit": "^12.4"
+        "phpunit/phpunit": "^13.1",
+        "ocolin/easyenv": "^3.0"
     },
     "license": "MIT",
     "autoload": {
         "psr-4": {
-            "Ocolin\\Calix\\Axos\\": "src/",
-            "Ocolin\\Calix\\Axos\\Tests\\": "tests/"
+            "Ocolin\\CalixAxos\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Ocolin\\CalixAxos\\Tests\\": "tests/"
         }
     },
     "authors": [
@@ -22,5 +45,11 @@
             "name": "Colin Miller",
             "email": "ocolin@cruzio.com"
         }
-    ]
+    ],
+    "scripts": {
+        "test": "vendor/bin/phpunit --no-coverage --display-deprecations --display-notices",
+        "debug": "vendor/bin/phpunit --no-coverage --display-deprecations --display-notices --debug",
+        "integration": "vendor/bin/phpunit --no-coverage --group integration",
+        "test-coverage": "XDEBUG_MODE=coverage vendor/bin/phpunit --coverage-html coverage"
+    }
 }
